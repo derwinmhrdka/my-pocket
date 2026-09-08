@@ -96,13 +96,9 @@ function QuickOpenPicker({
                 onClick={() => onPick(card.id)}
               >
                 <div className="absolute inset-x-0 bottom-0 p-4">
-                  <div className="card-name truncate text-[var(--paper)]">
-                    {card.name}
-                  </div>
+                  <div className="card-badge">{card.name}</div>
                   {card.cardNo ? (
-                    <div className="card-meta mt-0.5 truncate text-[var(--paper)]">
-                      {card.cardNo}
-                    </div>
+                    <div className="card-badge-meta">{card.cardNo}</div>
                   ) : null}
                 </div>
               </motion.button>

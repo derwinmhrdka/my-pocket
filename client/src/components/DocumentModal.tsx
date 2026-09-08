@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { isPdfPath } from '../lib/imageUtils'
 import { useCardStore } from '../store/useCardStore'
 
-type Preview = { src: string; alt: string }
+type Preview = { src: string; alt: string; isPdf: boolean }
 
 function ImageLightbox({
   preview,
@@ -71,46 +72,77 @@ function ImageLightbox({
           paddingBottom: chromeBottom,
         }}
       >
-        <motion.img
-          src={preview.src}
-          alt={preview.alt}
-          className="rounded-md object-contain shadow-2xl"
-          style={{
-            maxWidth: sideways ? availH : availW,
-            maxHeight: sideways ? availW : availH,
-            width: 'auto',
-            height: 'auto',
-          }}
-          initial={{ opacity: 0, scale: 0.96, rotate: 0 }}
-          animate={{ opacity: 1, scale: 1, rotate }}
-          exit={{ opacity: 0, scale: 0.96 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 24 }}
-          onClick={(e) => e.stopPropagation()}
-          draggable={false}
-        />
+        {preview.isPdf ? (
+          <iframe
+            title={preview.alt}
+            src={preview.src}
+            className="rounded-md bg-white shadow-2xl"
+            style={{
+              width: availW,
+              height: availH,
+              border: 'none',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <motion.img
+            src={preview.src}
+            alt={preview.alt}
+            className="rounded-md object-contain shadow-2xl"
+            style={{
+              maxWidth: sideways ? availH : availW,
+              maxHeight: sideways ? availW : availH,
+              width: 'auto',
+              height: 'auto',
+            }}
+            initial={{ opacity: 0, scale: 0.96, rotate: 0 }}
+            animate={{ opacity: 1, scale: 1, rotate }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+            onClick={(e) => e.stopPropagation()}
+            draggable={false}
+          />
+        )}
       </div>
 
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2"
         style={{ height: chromeBottom }}
       >
-        <button
-          type="button"
-          className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-lg"
-          style={{
-            color: 'var(--paper)',
-            borderColor: 'var(--line)',
-            background: 'var(--ink-2)',
-          }}
-          onClick={(e) => {
-            e.stopPropagation()
-            setRotate((r) => (r + 90) % 360)
-          }}
-          aria-label="Rotate image"
-          title="Rotate"
-        >
-          ↻
-        </button>
+        {preview.isPdf ? (
+          <a
+            href={preview.src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pointer-events-auto flex h-11 shrink-0 items-center justify-center rounded-xl border px-3 text-sm"
+            style={{
+              color: 'var(--paper)',
+              borderColor: 'var(--line)',
+              background: 'var(--ink-2)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            Open
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-lg"
+            style={{
+              color: 'var(--paper)',
+              borderColor: 'var(--line)',
+              background: 'var(--ink-2)',
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              setRotate((r) => (r + 90) % 360)
+            }}
+            aria-label="Rotate image"
+            title="Rotate"
+          >
+            ↻
+          </button>
+        )}
         {cardNo ? (
           <button
             type="button"
@@ -124,7 +156,7 @@ function ImageLightbox({
               e.stopPropagation()
               void copyCardNo()
             }}
-            aria-label="Copy card number"
+            aria-label="Copy ID / number"
           >
             {cardNo}
           </button>
@@ -133,6 +165,52 @@ function ImageLightbox({
         )}
       </div>
     </motion.div>
+  )
+}
+
+function MediaTile({
+  src,
+  thumbSrc,
+  alt,
+  label,
+  onOpen,
+}: {
+  src: string
+  thumbSrc: string
+  alt: string
+  label: string
+  onOpen: () => void
+}) {
+  const pdf = isPdfPath(src)
+  return (
+    <button
+      type="button"
+      className="mt-3 block h-[150px] w-full overflow-hidden rounded-[14px]"
+      onClick={onOpen}
+      aria-label={label}
+    >
+      {pdf ? (
+        <div
+          className="flex h-full w-full flex-col items-center justify-center gap-2"
+          style={{
+            background:
+              'linear-gradient(160deg,#2b2730,#141217)',
+          }}
+        >
+          <span
+            className="rounded-md border px-2.5 py-1 text-xs font-semibold tracking-wide"
+            style={{
+              color: 'var(--accent-2)',
+              borderColor: 'var(--accent-2)',
+            }}
+          >
+            PDF
+          </span>
+        </div>
+      ) : (
+        <img src={thumbSrc || src} alt={alt} className="h-full w-full object-cover" />
+      )}
+    </button>
   )
 }
 
@@ -235,49 +313,41 @@ export function DocumentModal() {
                   color: copied ? 'var(--accent-2)' : 'var(--paper)',
                 }}
                 onClick={copyCardNo}
-                aria-label="Copy card number"
+                aria-label="Copy ID / number"
                 title={copied ? 'Copied' : undefined}
               >
                 {card.cardNo}
               </button>
             ) : null}
 
-            <button
-              type="button"
-              className="mt-3 block h-[150px] w-full overflow-hidden rounded-[14px]"
-              onClick={() =>
+            <MediaTile
+              src={card.frontImagePath}
+              thumbSrc={card.frontThumbPath}
+              alt={`${card.name} front`}
+              label="Enlarge front"
+              onOpen={() =>
                 setPreview({
                   src: card.frontImagePath,
                   alt: `${card.name} front`,
+                  isPdf: isPdfPath(card.frontImagePath),
                 })
               }
-              aria-label="Enlarge front photo"
-            >
-              <img
-                src={card.frontImagePath}
-                alt={`${card.name} front`}
-                className="h-full w-full object-cover"
-              />
-            </button>
+            />
 
             {card.backImagePath ? (
-              <button
-                type="button"
-                className="mt-3 block h-[150px] w-full overflow-hidden rounded-[14px]"
-                onClick={() =>
+              <MediaTile
+                src={card.backImagePath}
+                thumbSrc={card.backThumbPath ?? card.backImagePath}
+                alt={`${card.name} back`}
+                label="Enlarge back"
+                onOpen={() =>
                   setPreview({
                     src: card.backImagePath!,
                     alt: `${card.name} back`,
+                    isPdf: isPdfPath(card.backImagePath),
                   })
                 }
-                aria-label="Enlarge back photo"
-              >
-                <img
-                  src={card.backImagePath}
-                  alt={`${card.name} back`}
-                  className="h-full w-full object-cover"
-                />
-              </button>
+              />
             ) : null}
 
             <div className="mt-4 flex justify-center gap-2">

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useAuthStore } from '../store/useAuthStore'
 import { useCardStore } from '../store/useCardStore'
 import type { Card } from '../types'
+import { OrientedCardMedia } from './OrientedCardMedia'
 
 const FAN = [
   { rotate: -14, x: -46, y: 6, z: 1 },
@@ -84,11 +85,9 @@ function FanSlot({
       style={{
         zIndex: fan.z + 2,
         borderColor: 'rgba(255,255,255,0.08)',
-        backgroundImage: card.frontThumbPath
-          ? `linear-gradient(180deg,transparent 40%,rgba(0,0,0,.75)), url(${card.frontThumbPath})`
+        background: card.frontThumbPath
+          ? undefined
           : PLACEHOLDER_BG[index],
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
       }}
       initial={false}
       animate={{
@@ -100,7 +99,13 @@ function FanSlot({
       transition={{ type: 'spring', stiffness: 300, damping: 22 }}
       onClick={() => onSelect(card.id)}
     >
-      <span className="card-name relative z-10 text-[13px]">{card.name}</span>
+      {card.frontThumbPath ? (
+        <OrientedCardMedia
+          src={card.frontThumbPath}
+          overlay="linear-gradient(180deg,transparent 40%,rgba(0,0,0,.75))"
+        />
+      ) : null}
+      <span className="card-badge relative z-10">{card.name}</span>
     </motion.button>
   )
 }
@@ -192,14 +197,9 @@ function FavoritePicker({
               >
                 <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
                   <div className="min-w-0">
-                    <div className="card-name truncate">{card.name}</div>
+                    <div className="card-badge">{card.name}</div>
                     {card.cardNo ? (
-                      <div
-                        className="card-meta mt-0.5 truncate"
-                        style={{ color: 'rgba(243,237,227,.7)' }}
-                      >
-                        {card.cardNo}
-                      </div>
+                      <div className="card-badge-meta">{card.cardNo}</div>
                     ) : null}
                   </div>
                   <span className="text-lg" style={{ color: 'var(--accent-2)' }}>

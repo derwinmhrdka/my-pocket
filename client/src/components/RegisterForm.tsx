@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type ClipboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { fileFromCompressed } from '../lib/imageUtils'
+import {
+  fileForUpload,
+  isAllowedUpload,
+  isPdfFile,
+} from '../lib/imageUtils'
 import { useCardStore } from '../store/useCardStore'
 
 export function RegisterForm() {
@@ -41,8 +45,8 @@ export function RegisterForm() {
   }
 
   function onPick(file: File | undefined | null, side: 'front' | 'back') {
-    if (!file || !file.type.startsWith('image/')) return
-    const url = URL.createObjectURL(file)
+    if (!file || !isAllowedUpload(file)) return
+    const url = isPdfFile(file) ? file.name : URL.createObjectURL(file)
     if (side === 'front') {
       setFront(file)
       setFrontPreview(url)
@@ -111,7 +115,7 @@ export function RegisterForm() {
       return
     }
     if (!front) {
-      setError('Front photo is required')
+      setError('Front photo or PDF is required')
       return
     }
     setBusy(true)
@@ -120,9 +124,9 @@ export function RegisterForm() {
       const form = new FormData()
       form.append('name', name.trim())
       if (cardNo.trim()) form.append('cardNo', cardNo.trim())
-      form.append('front', await fileFromCompressed(front, 'front.jpg'))
+      form.append('front', await fileForUpload(front, 'front.jpg'))
       if (back) {
-        form.append('back', await fileFromCompressed(back, 'back.jpg'))
+        form.append('back', await fileForUpload(back, 'back.jpg'))
       }
       await createCard(form)
       reset()
@@ -185,7 +189,7 @@ export function RegisterForm() {
               className="mt-3.5 mb-1.5 block text-xs"
               style={{ color: 'var(--muted-2)' }}
             >
-              Card No <span className="opacity-50">(optional)</span>
+              ID / Number <span className="opacity-50">(optional)</span>
             </label>
             <input
               className="w-full rounded-xl border px-3.5 py-3 text-sm outline-none tracking-wide"
@@ -194,15 +198,15 @@ export function RegisterForm() {
                 borderColor: 'var(--line)',
                 color: 'var(--paper)',
               }}
-              placeholder="e.g. 1234 5678 9012"
-              inputMode="numeric"
+              placeholder="e.g. passport, card no…"
               value={cardNo}
               onChange={(e) => setCardNo(e.target.value)}
             />
 
             <PhotoField
-              label="Front Photo"
+              label="Front"
               preview={frontPreview}
+              isPdf={Boolean(front && isPdfFile(front))}
               activePaste={pasteSide === 'front'}
               onFocusPaste={() => setPasteSide('front')}
               onPaste={(e) => onPasteEvent(e, 'front')}
@@ -217,7 +221,7 @@ export function RegisterForm() {
             <input
               ref={frontGalleryRef}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf,.pdf"
               className="hidden"
               onChange={(e) => {
                 onPick(e.target.files?.[0], 'front')
@@ -237,9 +241,10 @@ export function RegisterForm() {
             />
 
             <PhotoField
-              label="Back Photo"
+              label="Back"
               optional
               preview={backPreview}
+              isPdf={Boolean(back && isPdfFile(back))}
               activePaste={pasteSide === 'back'}
               onFocusPaste={() => setPasteSide('back')}
               onPaste={(e) => onPasteEvent(e, 'back')}
@@ -254,7 +259,7 @@ export function RegisterForm() {
             <input
               ref={backGalleryRef}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf,.pdf"
               className="hidden"
               onChange={(e) => {
                 onPick(e.target.files?.[0], 'back')
@@ -303,6 +308,7 @@ function PhotoField({
   label,
   optional,
   preview,
+  isPdf,
   activePaste,
   onFocusPaste,
   onPaste,
@@ -314,6 +320,7 @@ function PhotoField({
   label: string
   optional?: boolean
   preview: string | null
+  isPdf?: boolean
   activePaste: boolean
   onFocusPaste: () => void
   onPaste: (e: ClipboardEvent) => void
@@ -352,11 +359,27 @@ function PhotoField({
       >
         {preview ? (
           <div className="mb-3 flex justify-center">
-            <img
-              src={preview}
-              alt={`${label} preview`}
-              className="max-h-28 rounded-lg object-cover"
-            />
+            {isPdf ? (
+              <div
+                className="flex max-w-full flex-col items-center gap-1.5 rounded-lg px-4 py-4"
+                style={{ background: 'var(--ink)' }}
+              >
+                <IconPdf />
+                <span
+                  className="max-w-[220px] truncate text-xs"
+                  style={{ color: 'var(--paper-dim)' }}
+                  title={preview}
+                >
+                  {preview}
+                </span>
+              </div>
+            ) : (
+              <img
+                src={preview}
+                alt={`${label} preview`}
+                className="max-h-28 rounded-lg object-cover"
+              />
+            )}
           </div>
         ) : (
           <div
@@ -476,6 +499,16 @@ function IconImage() {
       <rect x="3.5" y="5" width="17" height="14" rx="2" />
       <circle cx="9" cy="10" r="1.5" />
       <path d="m7 16 3.5-3.5L14 16l2-2 3 3" />
+    </svg>
+  )
+}
+
+function IconPdf() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-2)' }} aria-hidden>
+      <path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5Z" />
+      <path d="M14 3.5V8h4.5" />
+      <path d="M8.5 13.5h7M8.5 17h5" />
     </svg>
   )
 }

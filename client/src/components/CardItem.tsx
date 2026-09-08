@@ -94,10 +94,12 @@ export function CardItem({
         onTap()
       }}
     >
-      <div className="card-name">{card.name}</div>
-      <div className="card-meta">
-        {card.cardNo ? card.cardNo : 'Tap to view'}
-      </div>
+      <div className="card-badge">{card.name}</div>
+      {card.cardNo ? (
+        <div className="card-badge-meta">{card.cardNo}</div>
+      ) : (
+        <div />
+      )}
     </motion.div>
   )
 }

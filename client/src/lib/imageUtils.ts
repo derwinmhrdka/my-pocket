@@ -30,10 +30,35 @@ export async function compressImage(
   return blob
 }
 
-export async function fileFromCompressed(
+export function isPdfFile(file: File) {
+  return (
+    file.type === 'application/pdf' ||
+    file.name.toLowerCase().endsWith('.pdf')
+  )
+}
+
+export function isImageFile(file: File) {
+  return file.type.startsWith('image/')
+}
+
+export function isAllowedUpload(file: File) {
+  return isImageFile(file) || isPdfFile(file)
+}
+
+export function isPdfPath(path: string | null | undefined) {
+  return Boolean(path?.toLowerCase().endsWith('.pdf'))
+}
+
+export async function fileForUpload(
   file: File,
   filename: string,
 ): Promise<File> {
+  if (isPdfFile(file)) {
+    const name = file.name.toLowerCase().endsWith('.pdf')
+      ? file.name
+      : filename.replace(/\.[^.]+$/, '') + '.pdf'
+    return new File([file], name, { type: 'application/pdf' })
+  }
   const blob = await compressImage(file)
   return new File([blob], filename, { type: 'image/jpeg' })
 }

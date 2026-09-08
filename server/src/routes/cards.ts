@@ -4,7 +4,7 @@ import multer from 'multer'
 import { join } from 'path'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../middleware/auth.js'
-import { saveCardImage, UPLOADS_DIR } from '../utils/image.js'
+import { saveCardUpload, UPLOADS_DIR } from '../utils/image.js'
 
 const router = Router()
 const upload = multer({
@@ -88,7 +88,17 @@ router.post(
       return
     }
     if (!front) {
-      res.status(400).json({ error: 'Front photo is required' })
+      res.status(400).json({ error: 'Front photo or PDF is required' })
+      return
+    }
+
+    const allowed = (f: Express.Multer.File) =>
+      f.mimetype.startsWith('image/') ||
+      f.mimetype === 'application/pdf' ||
+      f.originalname.toLowerCase().endsWith('.pdf')
+
+    if (!allowed(front) || (back && !allowed(back))) {
+      res.status(400).json({ error: 'Only images or PDF are allowed' })
       return
     }
 
@@ -109,10 +119,15 @@ router.post(
       )
       const id = rows[0].id
 
-      const frontSaved = await saveCardImage(id, 'front', front.buffer)
+      const frontSaved = await saveCardUpload(
+        id,
+        'front',
+        front.buffer,
+        front.mimetype,
+      )
       let backSaved: { fullRel: string; thumbRel: string } | null = null
       if (back) {
-        backSaved = await saveCardImage(id, 'back', back.buffer)
+        backSaved = await saveCardUpload(id, 'back', back.buffer, back.mimetype)
       }
 
       const { rows: updated } = await client.query<CardRow>(
