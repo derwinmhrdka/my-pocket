@@ -34,9 +34,8 @@ export function LockScreen() {
   useEffect(() => {
     if (!pinLocked) {
       setPin('')
-      clearError()
     }
-  }, [pinLocked, clearError])
+  }, [pinLocked])
 
   useEffect(() => {
     if (!pinLocked || pin.length !== 4 || verifyingRef.current) return

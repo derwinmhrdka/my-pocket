@@ -25,8 +25,20 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.has('auth') || params.has('authError')) {
+    const authError = params.get('authError')
+    if (params.has('auth') || authError) {
       window.history.replaceState({}, '', window.location.pathname)
+      if (authError === 'invalid_state') {
+        useAuthStore
+          .getState()
+          .setError('Sign-in was interrupted. Please try again.')
+      } else if (authError === 'google_failed') {
+        useAuthStore
+          .getState()
+          .setError('Google sign-in failed. Please try again.')
+      } else if (authError) {
+        useAuthStore.getState().setError('Sign-in failed. Please try again.')
+      }
       void checkSession()
     }
   }, [checkSession])

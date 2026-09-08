@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { randomBytes } from 'crypto'
 import { pool } from '../db/pool.js'
 import {
   COOKIE_NAME,
@@ -7,12 +6,13 @@ import {
   signSessionToken,
 } from '../middleware/auth.js'
 import {
+  createOAuthState,
   exchangeGoogleCode,
   getGoogleAuthUrl,
+  verifyOAuthState,
 } from '../utils/googleOAuth.js'
 
 const router = Router()
-const OAUTH_STATE_COOKIE = 'mypocket_oauth_state'
 
 router.get('/google', (_req, res) => {
   try {
@@ -24,15 +24,7 @@ router.get('/google', (_req, res) => {
       return
     }
 
-    const state = randomBytes(16).toString('hex')
-    const isProd = process.env.NODE_ENV === 'production'
-    res.cookie(OAUTH_STATE_COOKIE, state, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 10 * 60 * 1000,
-    })
+    const state = createOAuthState()
     res.redirect(getGoogleAuthUrl(state))
   } catch (err) {
     console.error('[auth/google]', err)
@@ -48,10 +40,8 @@ router.get('/google/callback', async (req, res) => {
   try {
     const code = String(req.query.code ?? '')
     const state = String(req.query.state ?? '')
-    const storedState = req.cookies?.[OAUTH_STATE_COOKIE] as string | undefined
-    res.clearCookie(OAUTH_STATE_COOKIE, { path: '/' })
 
-    if (!code || !state || !storedState || state !== storedState) {
+    if (!code || !state || !verifyOAuthState(state)) {
       res.redirect(`${clientOrigin}/?authError=invalid_state`)
       return
     }
@@ -74,7 +64,6 @@ router.get('/google/callback', async (req, res) => {
     )
     const userId = rows[0].id
 
-    // One-time: attach orphan cards (pre-multi-user) to the first Google user
     await pool.query(
       `UPDATE cards SET user_id = $1
        WHERE user_id IS NULL

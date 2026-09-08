@@ -29,6 +29,7 @@ type AuthState = {
   }) => Promise<void>
   logout: () => Promise<void>
   setSettingsOpen: (open: boolean) => void
+  setError: (error: string | null) => void
   clearError: () => void
 }
 
@@ -154,6 +155,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setSettingsOpen(open) {
     set({ settingsOpen: open })
+  },
+
+  setError(error) {
+    set({ error })
   },
 
   clearError() {

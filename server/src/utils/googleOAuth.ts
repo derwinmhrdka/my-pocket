@@ -1,3 +1,6 @@
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
+import { getJwtSecret } from '../middleware/auth.js'
+
 export type GoogleProfile = {
   sub: string
   email?: string
@@ -11,6 +14,43 @@ export function getGoogleCallbackUrl(): string {
   }
   const origin = process.env.CLIENT_ORIGIN ?? 'http://localhost:13002'
   return `${origin.replace(/\/$/, '')}/auth/google/callback`
+}
+
+/** Signed OAuth state — no cookie needed (Safari Private drops cookies on redirect). */
+export function createOAuthState(): string {
+  const nonce = randomBytes(16).toString('hex')
+  const ts = Math.floor(Date.now() / 1000).toString(36)
+  const payload = `${nonce}.${ts}`
+  const sig = createHmac('sha256', getJwtSecret())
+    .update(payload)
+    .digest('base64url')
+  return `${payload}.${sig}`
+}
+
+export function verifyOAuthState(state: string): boolean {
+  const parts = state.split('.')
+  if (parts.length !== 3) return false
+  const [nonce, ts, sig] = parts
+  if (!nonce || !ts || !sig) return false
+
+  const payload = `${nonce}.${ts}`
+  const expected = createHmac('sha256', getJwtSecret())
+    .update(payload)
+    .digest('base64url')
+
+  try {
+    const a = Buffer.from(sig)
+    const b = Buffer.from(expected)
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return false
+  } catch {
+    return false
+  }
+
+  const issued = Number.parseInt(ts, 36)
+  if (!Number.isFinite(issued)) return false
+  // 10 minutes
+  if (Math.abs(Math.floor(Date.now() / 1000) - issued) > 600) return false
+  return true
 }
 
 export function getGoogleAuthUrl(state: string): string {
