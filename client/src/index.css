@@ -121,11 +121,13 @@ textarea {
   -webkit-user-select: text;
 }
 
-/* Hide scrollbar — list favorit tetap bisa digeser */
+/* Scrollable, but no visible scrollbar */
+.hide-scrollbar,
 .favorite-picker-list {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+.hide-scrollbar::-webkit-scrollbar,
 .favorite-picker-list::-webkit-scrollbar {
   display: none;
   width: 0;

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ClipboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { fileFromCompressed } from '../lib/imageUtils'
 import { useCardStore } from '../store/useCardStore'
@@ -16,9 +16,12 @@ export function RegisterForm() {
   const [backPreview, setBackPreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pasteSide, setPasteSide] = useState<'front' | 'back'>('front')
 
-  const frontRef = useRef<HTMLInputElement>(null)
-  const backRef = useRef<HTMLInputElement>(null)
+  const frontGalleryRef = useRef<HTMLInputElement>(null)
+  const frontCameraRef = useRef<HTMLInputElement>(null)
+  const backGalleryRef = useRef<HTMLInputElement>(null)
+  const backCameraRef = useRef<HTMLInputElement>(null)
 
   function reset() {
     setName('')
@@ -29,6 +32,7 @@ export function RegisterForm() {
     setBackPreview(null)
     setError(null)
     setBusy(false)
+    setPasteSide('front')
   }
 
   function close() {
@@ -36,11 +40,8 @@ export function RegisterForm() {
     reset()
   }
 
-  async function onPick(
-    file: File | undefined,
-    side: 'front' | 'back',
-  ) {
-    if (!file) return
+  function onPick(file: File | undefined | null, side: 'front' | 'back') {
+    if (!file || !file.type.startsWith('image/')) return
     const url = URL.createObjectURL(file)
     if (side === 'front') {
       setFront(file)
@@ -49,7 +50,60 @@ export function RegisterForm() {
       setBack(file)
       setBackPreview(url)
     }
+    setError(null)
   }
+
+  function fileFromClipboardItems(items: DataTransferItemList | undefined) {
+    if (!items) return null
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        return item.getAsFile()
+      }
+    }
+    return null
+  }
+
+  function onPasteEvent(e: ClipboardEvent, side: 'front' | 'back') {
+    const file = fileFromClipboardItems(e.clipboardData?.items)
+    if (!file) return
+    e.preventDefault()
+    onPick(file, side)
+  }
+
+  async function pasteFromClipboard(side: 'front' | 'back') {
+    setPasteSide(side)
+    try {
+      if (!navigator.clipboard?.read) {
+        setError('Paste is not supported on this browser')
+        return
+      }
+      const items = await navigator.clipboard.read()
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'))
+        if (!type) continue
+        const blob = await item.getType(type)
+        onPick(new File([blob], 'pasted.jpg', { type: blob.type }), side)
+        return
+      }
+      setError('No image found in clipboard')
+    } catch {
+      setError('Could not paste. Copy an image first, then try again.')
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return
+
+    function onWindowPaste(e: globalThis.ClipboardEvent) {
+      const file = fileFromClipboardItems(e.clipboardData?.items)
+      if (!file) return
+      e.preventDefault()
+      onPick(file, pasteSide)
+    }
+
+    window.addEventListener('paste', onWindowPaste)
+    return () => window.removeEventListener('paste', onWindowPaste)
+  }, [open, pasteSide])
 
   async function onSave() {
     if (!name.trim()) {
@@ -66,10 +120,7 @@ export function RegisterForm() {
       const form = new FormData()
       form.append('name', name.trim())
       if (cardNo.trim()) form.append('cardNo', cardNo.trim())
-      form.append(
-        'front',
-        await fileFromCompressed(front, 'front.jpg'),
-      )
+      form.append('front', await fileFromCompressed(front, 'front.jpg'))
       if (back) {
         form.append('back', await fileFromCompressed(back, 'back.jpg'))
       }
@@ -93,7 +144,7 @@ export function RegisterForm() {
           onClick={close}
         >
           <motion.div
-            className="relative w-full rounded-t-[28px] px-6 pb-8 pt-6"
+            className="hide-scrollbar relative max-h-[92dvh] w-full overflow-y-auto rounded-t-[28px] px-6 pb-8 pt-6"
             style={{ background: 'var(--ink-2)' }}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
@@ -112,7 +163,10 @@ export function RegisterForm() {
             </button>
             <div className="brand text-[17px] font-bold">Add Card</div>
 
-            <label className="mt-3.5 mb-1.5 block text-xs" style={{ color: 'var(--muted-2)' }}>
+            <label
+              className="mt-3.5 mb-1.5 block text-xs"
+              style={{ color: 'var(--muted-2)' }}
+            >
               Document Name
             </label>
             <input
@@ -127,7 +181,10 @@ export function RegisterForm() {
               onChange={(e) => setName(e.target.value)}
             />
 
-            <label className="mt-3.5 mb-1.5 block text-xs" style={{ color: 'var(--muted-2)' }}>
+            <label
+              className="mt-3.5 mb-1.5 block text-xs"
+              style={{ color: 'var(--muted-2)' }}
+            >
               Card No <span className="opacity-50">(optional)</span>
             </label>
             <input
@@ -143,60 +200,77 @@ export function RegisterForm() {
               onChange={(e) => setCardNo(e.target.value)}
             />
 
-            <label className="mt-3.5 mb-1.5 block text-xs" style={{ color: 'var(--muted-2)' }}>
-              Front Photo
-            </label>
-            <button
-              type="button"
-              className="w-full rounded-[14px] border border-dashed px-4 py-5 text-center text-[13px]"
-              style={{ borderColor: 'var(--line)', color: 'var(--muted-2)' }}
-              onClick={() => frontRef.current?.click()}
-            >
-              {frontPreview ? (
-                <img
-                  src={frontPreview}
-                  alt="Front preview"
-                  className="mx-auto max-h-28 rounded-lg object-cover"
-                />
-              ) : (
-                '📷 Front photo'
-              )}
-            </button>
+            <PhotoField
+              label="Front Photo"
+              preview={frontPreview}
+              activePaste={pasteSide === 'front'}
+              onFocusPaste={() => setPasteSide('front')}
+              onPaste={(e) => onPasteEvent(e, 'front')}
+              onCamera={() => frontCameraRef.current?.click()}
+              onUpload={() => frontGalleryRef.current?.click()}
+              onPasteClick={() => void pasteFromClipboard('front')}
+              onClear={() => {
+                setFront(null)
+                setFrontPreview(null)
+              }}
+            />
             <input
-              ref={frontRef}
+              ref={frontGalleryRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                onPick(e.target.files?.[0], 'front')
+                e.target.value = ''
+              }}
+            />
+            <input
+              ref={frontCameraRef}
               type="file"
               accept="image/*"
               capture="environment"
               className="hidden"
-              onChange={(e) => onPick(e.target.files?.[0], 'front')}
+              onChange={(e) => {
+                onPick(e.target.files?.[0], 'front')
+                e.target.value = ''
+              }}
             />
 
-            <label className="mt-3.5 mb-1.5 block text-xs" style={{ color: 'var(--muted-2)' }}>
-              Back Photo <span className="opacity-50">(optional)</span>
-            </label>
-            <button
-              type="button"
-              className="w-full rounded-[14px] border border-dashed px-4 py-5 text-center text-[13px]"
-              style={{ borderColor: 'var(--line)', color: 'var(--muted-2)' }}
-              onClick={() => backRef.current?.click()}
-            >
-              {backPreview ? (
-                <img
-                  src={backPreview}
-                  alt="Back preview"
-                  className="mx-auto max-h-28 rounded-lg object-cover"
-                />
-              ) : (
-                '📷 Back photo'
-              )}
-            </button>
+            <PhotoField
+              label="Back Photo"
+              optional
+              preview={backPreview}
+              activePaste={pasteSide === 'back'}
+              onFocusPaste={() => setPasteSide('back')}
+              onPaste={(e) => onPasteEvent(e, 'back')}
+              onCamera={() => backCameraRef.current?.click()}
+              onUpload={() => backGalleryRef.current?.click()}
+              onPasteClick={() => void pasteFromClipboard('back')}
+              onClear={() => {
+                setBack(null)
+                setBackPreview(null)
+              }}
+            />
             <input
-              ref={backRef}
+              ref={backGalleryRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                onPick(e.target.files?.[0], 'back')
+                e.target.value = ''
+              }}
+            />
+            <input
+              ref={backCameraRef}
               type="file"
               accept="image/*"
               capture="environment"
               className="hidden"
-              onChange={(e) => onPick(e.target.files?.[0], 'back')}
+              onChange={(e) => {
+                onPick(e.target.files?.[0], 'back')
+                e.target.value = ''
+              }}
             />
 
             {error ? (
@@ -208,7 +282,7 @@ export function RegisterForm() {
             <button
               type="button"
               disabled={busy}
-              className="brand mt-[22px] w-full rounded-[14px] py-3.5 text-sm font-bold disabled:opacity-60"
+              className="brand mt-[18px] w-full rounded-[14px] py-3.5 text-sm font-bold disabled:opacity-60"
               style={{
                 background:
                   'linear-gradient(120deg, var(--accent), var(--accent-2))',
@@ -222,5 +296,186 @@ export function RegisterForm() {
         </motion.div>
       ) : null}
     </AnimatePresence>
+  )
+}
+
+function PhotoField({
+  label,
+  optional,
+  preview,
+  activePaste,
+  onFocusPaste,
+  onPaste,
+  onCamera,
+  onUpload,
+  onPasteClick,
+  onClear,
+}: {
+  label: string
+  optional?: boolean
+  preview: string | null
+  activePaste: boolean
+  onFocusPaste: () => void
+  onPaste: (e: ClipboardEvent) => void
+  onCamera: () => void
+  onUpload: () => void
+  onPasteClick: () => void
+  onClear: () => void
+}) {
+  const btnClass =
+    'flex h-11 flex-1 items-center justify-center rounded-xl border transition active:scale-95'
+  const btnStyle = {
+    borderColor: 'var(--line)',
+    background: 'var(--ink)',
+    color: 'var(--paper)',
+  } as const
+
+  return (
+    <div className="mt-3.5">
+      <label className="mb-1.5 block text-xs" style={{ color: 'var(--muted-2)' }}>
+        {label}{' '}
+        {optional ? <span className="opacity-50">(optional)</span> : null}
+      </label>
+
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label={label}
+        className="rounded-[14px] border border-dashed px-3 py-3 outline-none"
+        style={{
+          borderColor: activePaste ? 'var(--accent-2)' : 'var(--line)',
+          background: activePaste ? 'rgba(216,162,59,0.06)' : 'transparent',
+        }}
+        onClick={onFocusPaste}
+        onFocus={onFocusPaste}
+        onPaste={onPaste}
+      >
+        {preview ? (
+          <div className="mb-3 flex justify-center">
+            <img
+              src={preview}
+              alt={`${label} preview`}
+              className="max-h-28 rounded-lg object-cover"
+            />
+          </div>
+        ) : (
+          <div
+            className="mb-3 flex h-20 items-center justify-center rounded-lg"
+            style={{ background: 'var(--ink)' }}
+            aria-hidden
+          >
+            <IconImage />
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={btnClass}
+            style={btnStyle}
+            aria-label="Camera"
+            title="Camera"
+            onClick={(e) => {
+              e.stopPropagation()
+              onFocusPaste()
+              onCamera()
+            }}
+          >
+            <IconCamera />
+          </button>
+          <button
+            type="button"
+            className={btnClass}
+            style={btnStyle}
+            aria-label="Upload"
+            title="Upload"
+            onClick={(e) => {
+              e.stopPropagation()
+              onFocusPaste()
+              onUpload()
+            }}
+          >
+            <IconUpload />
+          </button>
+          <button
+            type="button"
+            className={btnClass}
+            style={btnStyle}
+            aria-label="Paste"
+            title="Paste"
+            onClick={(e) => {
+              e.stopPropagation()
+              onPasteClick()
+            }}
+          >
+            <IconPaste />
+          </button>
+          {preview ? (
+            <button
+              type="button"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition active:scale-95"
+              style={{
+                borderColor: 'var(--line)',
+                color: 'var(--muted-2)',
+              }}
+              aria-label="Clear"
+              title="Clear"
+              onClick={(e) => {
+                e.stopPropagation()
+                onClear()
+              }}
+            >
+              <IconClear />
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IconCamera() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h2l1.2-1.8A1.5 1.5 0 0 1 10.9 3.5h2.2a1.5 1.5 0 0 1 1.2.7L15.5 6h2A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-9Z" />
+      <circle cx="12" cy="13" r="3.2" />
+    </svg>
+  )
+}
+
+function IconUpload() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 16V5" />
+      <path d="m8 9 4-4 4 4" />
+      <path d="M5 19h14" />
+    </svg>
+  )
+}
+
+function IconPaste() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 5h6a2 2 0 0 1 2 2v1h1.5A1.5 1.5 0 0 1 20 9.5v9A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5v-9A1.5 1.5 0 0 1 5.5 8H7V7a2 2 0 0 1 2-2Z" />
+      <path d="M9 5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7H9V5.5Z" />
+    </svg>
+  )
+}
+
+function IconClear() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  )
+}
+
+function IconImage() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--muted-2)', opacity: 0.7 }} aria-hidden>
+      <rect x="3.5" y="5" width="17" height="14" rx="2" />
+      <circle cx="9" cy="10" r="1.5" />
+      <path d="m7 16 3.5-3.5L14 16l2-2 3 3" />
+    </svg>
   )
 }

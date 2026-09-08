@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuthStore } from '../store/useAuthStore'
+import { PIN_LENGTH } from './PinRevealInput'
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'] as const
 
@@ -29,16 +30,19 @@ export function LockScreen() {
   const [busy, setBusy] = useState(false)
   const [shake, setShake] = useState(false)
   const [pressedKey, setPressedKey] = useState<string | null>(null)
+  const [revealIndex, setRevealIndex] = useState<number | null>(null)
   const verifyingRef = useRef(false)
+  const revealTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!pinLocked) {
       setPin('')
+      setRevealIndex(null)
     }
   }, [pinLocked])
 
   useEffect(() => {
-    if (!pinLocked || pin.length !== 4 || verifyingRef.current) return
+    if (!pinLocked || pin.length !== PIN_LENGTH || verifyingRef.current) return
 
     verifyingRef.current = true
     setBusy(true)
@@ -50,21 +54,33 @@ export function LockScreen() {
 
       if (!ok) {
         setPin('')
+        setRevealIndex(null)
         setShake(true)
         window.setTimeout(() => setShake(false), 480)
       }
     })()
   }, [pin, pinLocked, unlockWithPin])
 
+  function flashDigit(index: number) {
+    setRevealIndex(index)
+    if (revealTimerRef.current) window.clearTimeout(revealTimerRef.current)
+    revealTimerRef.current = window.setTimeout(() => setRevealIndex(null), 420)
+  }
+
   function onKey(key: string) {
     if (busy) return
     clearError()
     if (key === '⌫') {
       setPin((p) => p.slice(0, -1))
+      setRevealIndex(null)
       return
     }
-    if (key && pin.length < 4) {
-      setPin((p) => p + key)
+    if (key && pin.length < PIN_LENGTH) {
+      setPin((p) => {
+        const next = p + key
+        flashDigit(next.length - 1)
+        return next
+      })
     }
   }
 
@@ -189,7 +205,7 @@ export function LockScreen() {
               </motion.p>
 
               <motion.div
-                className="mb-3 flex gap-4"
+                className="mb-3 flex gap-2.5"
                 aria-label="PIN dots"
                 animate={
                   shake
@@ -206,34 +222,40 @@ export function LockScreen() {
                       : { type: 'spring', stiffness: 400, damping: 28 }
                 }
               >
-                {Array.from({ length: 4 }).map((_, i) => {
+                {Array.from({ length: PIN_LENGTH }).map((_, i) => {
                   const filled = i < pin.length
+                  const showDigit = filled && revealIndex === i
                   return (
                     <motion.div
                       key={i}
-                      className="relative flex h-3.5 w-3.5 items-center justify-center"
+                      className="relative flex h-8 w-7 items-center justify-center"
                       initial={false}
-                      animate={{
-                        scale: filled ? 1 : 0.92,
-                      }}
+                      animate={{ scale: filled ? 1 : 0.94 }}
                       transition={{ type: 'spring', stiffness: 500, damping: 22 }}
                     >
-                      <motion.div
-                        className="absolute inset-0 rounded-full"
-                        style={{
-                          border: `1.5px solid ${filled ? 'var(--accent-2)' : 'var(--paper-dim)'}`,
-                          background: filled ? 'var(--accent-2)' : 'transparent',
-                          boxShadow: filled
-                            ? '0 0 14px rgba(216,162,59,0.45)'
-                            : 'none',
-                        }}
-                        animate={
-                          filled
-                            ? { scale: [0.55, 1.15, 1] }
-                            : { scale: 1 }
-                        }
-                        transition={{ duration: 0.28, ease: easeOut }}
-                      />
+                      {showDigit ? (
+                        <span
+                          className="brand text-[18px] font-semibold"
+                          style={{ color: 'var(--accent-2)' }}
+                        >
+                          {pin[i]}
+                        </span>
+                      ) : (
+                        <motion.div
+                          className="h-3 w-3 rounded-full"
+                          style={{
+                            border: `1.5px solid ${filled ? 'var(--accent-2)' : 'var(--paper-dim)'}`,
+                            background: filled
+                              ? 'var(--accent-2)'
+                              : 'transparent',
+                            boxShadow: filled
+                              ? '0 0 14px rgba(216,162,59,0.45)'
+                              : 'none',
+                          }}
+                          animate={filled ? { scale: [0.55, 1.15, 1] } : { scale: 1 }}
+                          transition={{ duration: 0.28, ease: easeOut }}
+                        />
+                      )}
                     </motion.div>
                   )
                 })}

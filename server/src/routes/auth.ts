@@ -95,8 +95,8 @@ router.post('/dev-skip', async (_req, res) => {
 /** Unlock after auto-lock — requires existing Google session cookie. */
 router.post('/unlock', requireAuth, pinLimiter, async (req, res) => {
   const pin = String(req.body?.pin ?? '')
-  if (!/^\d{4}$/.test(pin)) {
-    res.status(400).json({ error: 'PIN must be 4 digits' })
+  if (!/^\d{4}$|^\d{6}$/.test(pin)) {
+    res.status(400).json({ error: 'PIN must be 4 or 6 digits' })
     return
   }
 
@@ -195,8 +195,8 @@ router.patch('/pin', requireAuth, pinLimiter, async (req, res) => {
     const currentPin = String(req.body?.currentPin ?? '')
     const newPin = String(req.body?.newPin ?? '')
 
-    if (!/^\d{4}$/.test(newPin)) {
-      res.status(400).json({ error: 'New PIN must be 4 digits' })
+    if (!/^\d{6}$/.test(newPin)) {
+      res.status(400).json({ error: 'New PIN must be 6 digits' })
       return
     }
 
@@ -207,7 +207,10 @@ router.patch('/pin', requireAuth, pinLimiter, async (req, res) => {
     }
 
     if (user.pin_hash) {
-      if (!/^\d{4}$/.test(currentPin) || !verifyPin(currentPin, user.pin_hash)) {
+      if (
+        !/^\d{4}$|^\d{6}$/.test(currentPin) ||
+        !verifyPin(currentPin, user.pin_hash)
+      ) {
         res.status(401).json({ error: 'Current PIN is wrong' })
         return
       }

@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuthStore } from '../store/useAuthStore'
+import {
+  PIN_LENGTH,
+  PIN_REGEX,
+  PIN_UNLOCK_REGEX,
+  PinRevealInput,
+} from './PinRevealInput'
 
 const LOCK_OPTIONS = [
   { value: 0, label: 'Off' },
@@ -63,15 +69,15 @@ export function SettingsModal() {
   }
 
   async function savePin() {
-    if (!/^\d{4}$/.test(newPin)) {
-      setError('New PIN must be 4 digits')
+    if (!PIN_REGEX.test(newPin)) {
+      setError(`New PIN must be ${PIN_LENGTH} digits`)
       return
     }
     if (newPin !== confirmPin) {
       setError('PIN confirmation does not match')
       return
     }
-    if (hasPin && !/^\d{4}$/.test(currentPin)) {
+    if (hasPin && !PIN_UNLOCK_REGEX.test(currentPin)) {
       setError('Enter your current PIN')
       return
     }
@@ -106,7 +112,7 @@ export function SettingsModal() {
           onClick={() => setSettingsOpen(false)}
         >
           <motion.div
-            className="max-h-[88dvh] w-full max-w-[360px] overflow-y-auto rounded-[22px] border p-5"
+            className="hide-scrollbar max-h-[88dvh] w-full max-w-[360px] overflow-y-auto rounded-[22px] border p-5"
             style={{
               background: 'var(--ink-2)',
               borderColor: 'rgba(255,255,255,0.08)',
@@ -199,10 +205,6 @@ export function SettingsModal() {
             >
               {hasPin ? 'Change PIN' : 'Set PIN (optional)'}
             </div>
-            <p className="mb-3 text-xs" style={{ color: 'var(--muted)' }}>
-              PIN protects your pocket after auto-lock. Sign-in is always with
-              Google.
-            </p>
 
             {hasPin ? (
               <>
@@ -212,20 +214,14 @@ export function SettingsModal() {
                 >
                   Current PIN
                 </label>
-                <input
-                  className="mb-3 w-full rounded-xl border px-3.5 py-3 text-sm outline-none tracking-[0.3em]"
+                <PinRevealInput
+                  className="mb-3 w-full overflow-hidden rounded-xl border"
                   style={{
                     background: 'var(--ink)',
                     borderColor: 'var(--line)',
-                    color: 'var(--paper)',
                   }}
-                  inputMode="numeric"
-                  maxLength={4}
                   value={currentPin}
-                  onChange={(e) =>
-                    setCurrentPin(e.target.value.replace(/\D/g, '').slice(0, 4))
-                  }
-                  placeholder="••••"
+                  onChange={setCurrentPin}
                 />
               </>
             ) : null}
@@ -236,20 +232,14 @@ export function SettingsModal() {
             >
               New PIN
             </label>
-            <input
-              className="mb-3 w-full rounded-xl border px-3.5 py-3 text-sm outline-none tracking-[0.3em]"
+            <PinRevealInput
+              className="mb-3 w-full overflow-hidden rounded-xl border"
               style={{
                 background: 'var(--ink)',
                 borderColor: 'var(--line)',
-                color: 'var(--paper)',
               }}
-              inputMode="numeric"
-              maxLength={4}
               value={newPin}
-              onChange={(e) =>
-                setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))
-              }
-              placeholder="••••"
+              onChange={setNewPin}
             />
 
             <label
@@ -258,22 +248,15 @@ export function SettingsModal() {
             >
               Confirm PIN
             </label>
-            <input
-              className="mb-4 w-full rounded-xl border px-3.5 py-3 text-sm outline-none tracking-[0.3em]"
+            <PinRevealInput
+              className="mb-4 w-full overflow-hidden rounded-xl border"
               style={{
                 background: 'var(--ink)',
                 borderColor: 'var(--line)',
-                color: 'var(--paper)',
               }}
-              inputMode="numeric"
-              maxLength={4}
               value={confirmPin}
-              onChange={(e) =>
-                setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))
-              }
-              placeholder="••••"
+              onChange={setConfirmPin}
             />
-
             <button
               type="button"
               disabled={busy}
