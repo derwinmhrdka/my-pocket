@@ -1,9 +1,106 @@
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { isPdfPath } from '../lib/imageUtils'
 import { useCardStore } from '../store/useCardStore'
 
-type Preview = { src: string; alt: string; isPdf: boolean }
+type Preview = {
+  src: string
+  alt: string
+  isPdf: boolean
+  fileName: string
+}
+
+function sanitizeFileName(name: string) {
+  return name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim() || 'card'
+}
+
+function extFromPath(path: string) {
+  const m = path.toLowerCase().match(/\.([a-z0-9]+)(?:\?|$)/)
+  return m?.[1] ?? (isPdfPath(path) ? 'pdf' : 'jpg')
+}
+
+async function fetchBlob(src: string) {
+  const res = await fetch(src, { credentials: 'include' })
+  if (!res.ok) throw new Error('Could not load file')
+  return res.blob()
+}
+
+async function blobToPng(blob: Blob) {
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    bitmap.close()
+    throw new Error('Canvas unavailable')
+  }
+  ctx.drawImage(bitmap, 0, 0)
+  bitmap.close()
+  const png = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('PNG convert failed'))),
+      'image/png',
+    )
+  })
+  return png
+}
+
+async function copyFileToClipboard(src: string, isPdf: boolean) {
+  const blob = await fetchBlob(src)
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+    throw new Error('Copy not supported')
+  }
+
+  if (isPdf) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'application/pdf': Promise.resolve(blob),
+        }),
+      ])
+      return
+    } catch {
+      throw new Error('PDF copy not supported here — use download')
+    }
+  }
+
+  const type = blob.type || 'image/jpeg'
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({ [type]: Promise.resolve(blob) }),
+    ])
+  } catch {
+    const png = await blobToPng(blob)
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'image/png': Promise.resolve(png) }),
+    ])
+  }
+}
+
+async function downloadFile(src: string, fileName: string) {
+  const blob = await fetchBlob(src)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+function chromeBtnClass() {
+  return 'pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition active:scale-95'
+}
+
+function chromeBtnStyle(active = false) {
+  return {
+    color: active ? 'var(--accent-2)' : 'var(--paper)',
+    borderColor: active ? 'var(--accent-2)' : 'var(--line)',
+    background: 'var(--ink-2)',
+  } as const
+}
 
 function ImageLightbox({
   preview,
@@ -14,7 +111,10 @@ function ImageLightbox({
   cardNo: string | null
   onClose: () => void
 }) {
-  const [copied, setCopied] = useState(false)
+  const [copiedNo, setCopiedNo] = useState(false)
+  const [copiedFile, setCopiedFile] = useState(false)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'copy' | 'download' | null>(null)
   const [rotate, setRotate] = useState(90)
 
   async function copyCardNo() {
@@ -29,8 +129,40 @@ function ImageLightbox({
       document.execCommand('copy')
       document.body.removeChild(ta)
     }
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1500)
+    setCopiedNo(true)
+    window.setTimeout(() => setCopiedNo(false), 1500)
+  }
+
+  async function onCopyFile(e: MouseEvent) {
+    e.stopPropagation()
+    if (busy) return
+    setBusy('copy')
+    setFileError(null)
+    try {
+      await copyFileToClipboard(preview.src, preview.isPdf)
+      setCopiedFile(true)
+      window.setTimeout(() => setCopiedFile(false), 1500)
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : 'Copy failed')
+      window.setTimeout(() => setFileError(null), 2500)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function onDownloadFile(e: MouseEvent) {
+    e.stopPropagation()
+    if (busy) return
+    setBusy('download')
+    setFileError(null)
+    try {
+      await downloadFile(preview.src, preview.fileName)
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : 'Download failed')
+      window.setTimeout(() => setFileError(null), 2500)
+    } finally {
+      setBusy(null)
+    }
   }
 
   const sideways = rotate % 180 !== 0
@@ -106,65 +238,117 @@ function ImageLightbox({
       </div>
 
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2"
-        style={{ height: chromeBottom }}
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end gap-1 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2"
+        style={{ minHeight: chromeBottom }}
       >
-        {preview.isPdf ? (
-          <a
-            href={preview.src}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pointer-events-auto flex h-11 shrink-0 items-center justify-center rounded-xl border px-3 text-sm"
-            style={{
-              color: 'var(--paper)',
-              borderColor: 'var(--line)',
-              background: 'var(--ink-2)',
-            }}
-            onClick={(e) => e.stopPropagation()}
+        {fileError ? (
+          <p
+            className="pointer-events-none text-center text-xs"
+            style={{ color: 'var(--accent)' }}
           >
-            Open
-          </a>
-        ) : (
+            {fileError}
+          </p>
+        ) : null}
+        <div className="flex items-center gap-2">
+          {preview.isPdf ? null : (
+            <button
+              type="button"
+              className={chromeBtnClass()}
+              style={chromeBtnStyle()}
+              onClick={(e) => {
+                e.stopPropagation()
+                setRotate((r) => (r + 90) % 360)
+              }}
+              aria-label="Rotate image"
+              title="Rotate"
+            >
+              ↻
+            </button>
+          )}
           <button
             type="button"
-            className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-lg"
-            style={{
-              color: 'var(--paper)',
-              borderColor: 'var(--line)',
-              background: 'var(--ink-2)',
-            }}
-            onClick={(e) => {
-              e.stopPropagation()
-              setRotate((r) => (r + 90) % 360)
-            }}
-            aria-label="Rotate image"
-            title="Rotate"
+            className={chromeBtnClass()}
+            style={chromeBtnStyle(copiedFile)}
+            disabled={busy === 'copy'}
+            onClick={onCopyFile}
+            aria-label="Copy file"
+            title={copiedFile ? 'Copied' : 'Copy file'}
           >
-            ↻
+            <IconCopy />
           </button>
-        )}
-        {cardNo ? (
           <button
             type="button"
-            className="brand pointer-events-auto flex min-w-0 flex-1 items-center justify-center rounded-xl border px-3 py-2.5 text-center text-sm font-semibold tracking-wide transition active:scale-[0.98]"
-            style={{
-              background: 'var(--ink-2)',
-              borderColor: copied ? 'var(--accent-2)' : 'var(--line)',
-              color: copied ? 'var(--accent-2)' : 'var(--paper)',
-            }}
-            onClick={(e) => {
-              e.stopPropagation()
-              void copyCardNo()
-            }}
-            aria-label="Copy ID / number"
+            className={chromeBtnClass()}
+            style={chromeBtnStyle()}
+            disabled={busy === 'download'}
+            onClick={onDownloadFile}
+            aria-label="Download file"
+            title="Download file"
           >
-            {cardNo}
+            <IconDownload />
           </button>
-        ) : (
-          <div className="flex-1" />
-        )}
+          {cardNo ? (
+            <button
+              type="button"
+              className="brand pointer-events-auto flex min-w-0 flex-1 items-center justify-center rounded-xl border px-3 py-2.5 text-center text-sm font-semibold tracking-wide transition active:scale-[0.98]"
+              style={{
+                background: 'var(--ink-2)',
+                borderColor: copiedNo ? 'var(--accent-2)' : 'var(--line)',
+                color: copiedNo ? 'var(--accent-2)' : 'var(--paper)',
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                void copyCardNo()
+              }}
+              aria-label="Copy ID / number"
+            >
+              {cardNo}
+            </button>
+          ) : (
+            <div className="flex-1" />
+          )}
+        </div>
       </div>
     </motion.div>
+  )
+}
+
+function IconCopy() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+  )
+}
+
+function IconDownload() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 4v11" />
+      <path d="m7.5 11.5 4.5 4.5 4.5-4.5" />
+      <path d="M5 19h14" />
+    </svg>
   )
 }
 
@@ -193,8 +377,7 @@ function MediaTile({
         <div
           className="flex h-full w-full flex-col items-center justify-center gap-2"
           style={{
-            background:
-              'linear-gradient(160deg,#2b2730,#141217)',
+            background: 'linear-gradient(160deg,#2b2730,#141217)',
           }}
         >
           <span
@@ -208,7 +391,11 @@ function MediaTile({
           </span>
         </div>
       ) : (
-        <img src={thumbSrc || src} alt={alt} className="h-full w-full object-cover" />
+        <img
+          src={thumbSrc || src}
+          alt={alt}
+          className="h-full w-full object-cover"
+        />
       )}
     </button>
   )
@@ -226,6 +413,20 @@ export function DocumentModal() {
   const [leaving, setLeaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
+
+  function previewFor(
+    path: string,
+    side: 'front' | 'back',
+  ): Preview {
+    const base = sanitizeFileName(card?.name ?? 'card')
+    const ext = extFromPath(path)
+    return {
+      src: path,
+      alt: `${card?.name ?? 'card'} ${side}`,
+      isPdf: isPdfPath(path),
+      fileName: `${base}-${side}.${ext}`,
+    }
+  }
 
   async function onStar() {
     if (!card) return
@@ -275,7 +476,7 @@ export function DocumentModal() {
           onClick={closeDocument}
         >
           <motion.div
-            layoutId={`card-${card.id}`}
+            layoutId={`doc-${card.id}`}
             className="w-[300px] rounded-[22px] border p-[22px]"
             style={{
               background: 'var(--ink-2)',
@@ -325,13 +526,7 @@ export function DocumentModal() {
               thumbSrc={card.frontThumbPath}
               alt={`${card.name} front`}
               label="Enlarge front"
-              onOpen={() =>
-                setPreview({
-                  src: card.frontImagePath,
-                  alt: `${card.name} front`,
-                  isPdf: isPdfPath(card.frontImagePath),
-                })
-              }
+              onOpen={() => setPreview(previewFor(card.frontImagePath, 'front'))}
             />
 
             {card.backImagePath ? (
@@ -341,11 +536,7 @@ export function DocumentModal() {
                 alt={`${card.name} back`}
                 label="Enlarge back"
                 onOpen={() =>
-                  setPreview({
-                    src: card.backImagePath!,
-                    alt: `${card.name} back`,
-                    isPdf: isPdfPath(card.backImagePath),
-                  })
+                  setPreview(previewFor(card.backImagePath!, 'back'))
                 }
               />
             ) : null}

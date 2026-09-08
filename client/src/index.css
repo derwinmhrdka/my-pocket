@@ -129,27 +129,25 @@ body {
   line-height: 1;
 }
 
-/* Mockup cardIn — cubic-bezier bounce */
+/* Enter: opacity only — transform must stay free for lift */
 @keyframes cardIn {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
 .pocket-card-enter {
-  animation: cardIn 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.2) forwards;
-  opacity: 0;
+  animation: cardIn 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
 }
 
 .pocket-card {
   transition:
-    top 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.3),
-    box-shadow 0.3s ease;
+    transform 0.34s cubic-bezier(0.2, 0.9, 0.3, 1.15),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
 }
 
 button,

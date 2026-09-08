@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { cardFaceColor, cardPhotoBackground, CARD_PHOTO_SCRIM } from '../lib/cardFace'
 import { useAuthStore } from '../store/useAuthStore'
 import { useCardStore } from '../store/useCardStore'
 import type { Card } from '../types'
@@ -10,12 +11,6 @@ const FAN = [
   { rotate: 0, x: 0, y: -10, z: 3 },
   { rotate: 14, x: 46, y: 6, z: 2 },
 ] as const
-
-const PLACEHOLDER_BG = [
-  'linear-gradient(160deg,#2b2730,#141217)',
-  'linear-gradient(160deg,var(--accent),#7c2718)',
-  'linear-gradient(160deg,var(--accent-2),#8a611c)',
-]
 
 /** Susun favorit: kartu terpilih di slot tengah (index 1). */
 function buildSlots(
@@ -49,6 +44,7 @@ function FanSlot({
   onSelect: (id: string) => void
   onAssign: () => void
 }) {
+  const previewOriginal = useAuthStore((s) => s.previewOriginalCard)
   const fan = FAN[index]
   if (!card) {
     return (
@@ -76,6 +72,8 @@ function FanSlot({
     )
   }
 
+  const showPhoto = previewOriginal && Boolean(card.frontThumbPath)
+
   return (
     <motion.button
       type="button"
@@ -85,9 +83,10 @@ function FanSlot({
       style={{
         zIndex: fan.z + 2,
         borderColor: 'rgba(255,255,255,0.08)',
-        background: card.frontThumbPath
-          ? undefined
-          : PLACEHOLDER_BG[index],
+        background: showPhoto ? undefined : cardFaceColor(card.id, index),
+        boxShadow: showPhoto
+          ? '0 12px 24px rgba(0,0,0,.4), inset 0 0 36px rgba(0,0,0,.4)'
+          : '0 12px 24px rgba(0,0,0,.4)',
       }}
       initial={false}
       animate={{
@@ -99,10 +98,10 @@ function FanSlot({
       transition={{ type: 'spring', stiffness: 300, damping: 22 }}
       onClick={() => onSelect(card.id)}
     >
-      {card.frontThumbPath ? (
+      {showPhoto ? (
         <OrientedCardMedia
           src={card.frontThumbPath}
-          overlay="linear-gradient(180deg,transparent 40%,rgba(0,0,0,.75))"
+          overlay={CARD_PHOTO_SCRIM}
         />
       ) : null}
       <span className="card-badge relative z-10">{card.name}</span>
@@ -123,6 +122,8 @@ function FavoritePicker({
   onClose: () => void
   onGoMain: () => void
 }) {
+  const previewOriginal = useAuthStore((s) => s.previewOriginalCard)
+
   return (
     <motion.div
       className="absolute inset-0 z-[200] flex flex-col"
@@ -173,41 +174,50 @@ function FavoritePicker({
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4 pt-2">
-            {candidates.map((card, i) => (
-              <motion.button
-                key={card.id}
-                type="button"
-                disabled={busyId === card.id}
-                className="relative w-full max-w-[320px] overflow-hidden rounded-[18px] border text-left disabled:opacity-60"
-                style={{
-                  aspectRatio: '1.586 / 1',
-                  borderColor: 'rgba(255,255,255,0.08)',
-                  backgroundImage: card.frontThumbPath
-                    ? `linear-gradient(180deg,transparent 35%,rgba(0,0,0,.78)), url(${card.frontThumbPath})`
-                    : PLACEHOLDER_BG[i % PLACEHOLDER_BG.length],
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  boxShadow: '0 10px 26px rgba(0,0,0,.45)',
-                }}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => onPick(card.id)}
-              >
-                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
-                  <div className="min-w-0">
-                    <div className="card-badge">{card.name}</div>
-                    {card.cardNo ? (
-                      <div className="card-badge-meta">{card.cardNo}</div>
-                    ) : null}
+            {candidates.map((card, i) => {
+              const showPhoto =
+                previewOriginal && Boolean(card.frontThumbPath)
+              return (
+                <motion.button
+                  key={card.id}
+                  type="button"
+                  disabled={busyId === card.id}
+                  className="relative w-full max-w-[320px] overflow-hidden rounded-[18px] border text-left disabled:opacity-60"
+                  style={{
+                    aspectRatio: '1.586 / 1',
+                    borderColor: 'rgba(255,255,255,0.08)',
+                    backgroundImage: showPhoto
+                      ? cardPhotoBackground(card.frontThumbPath)
+                      : cardFaceColor(card.id, i),
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    boxShadow: showPhoto
+                      ? '0 10px 26px rgba(0,0,0,.45), inset 0 0 36px rgba(0,0,0,.38)'
+                      : '0 10px 26px rgba(0,0,0,.45)',
+                  }}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => onPick(card.id)}
+                >
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
+                    <div className="min-w-0">
+                      <div className="card-badge">{card.name}</div>
+                      {card.cardNo ? (
+                        <div className="card-badge-meta">{card.cardNo}</div>
+                      ) : null}
+                    </div>
+                    <span
+                      className="text-lg"
+                      style={{ color: 'var(--accent-2)' }}
+                    >
+                      ★
+                    </span>
                   </div>
-                  <span className="text-lg" style={{ color: 'var(--accent-2)' }}>
-                    ★
-                  </span>
-                </div>
-              </motion.button>
-            ))}
+                </motion.button>
+              )
+            })}
           </div>
         )}
       </div>
@@ -215,8 +225,145 @@ function FavoritePicker({
   )
 }
 
+function WaveButton({
+  children,
+  onClick,
+  ariaLabel,
+  title,
+  size,
+  tone,
+}: {
+  children: ReactNode
+  onClick: () => void
+  ariaLabel: string
+  title?: string
+  size: number
+  tone: 'accent' | 'muted'
+}) {
+  const [pressed, setPressed] = useState(false)
+  const [bursts, setBursts] = useState<number[]>([])
+  const burstId = useRef(0)
+
+  const ring =
+    tone === 'accent'
+      ? 'rgba(216, 162, 59, 0.5)'
+      : 'rgba(242, 235, 227, 0.32)'
+  const ringSoft =
+    tone === 'accent'
+      ? 'rgba(196, 72, 54, 0.32)'
+      : 'rgba(242, 235, 227, 0.16)'
+
+  function spawnBurst() {
+    const id = ++burstId.current
+    setBursts((prev) => [...prev, id])
+    window.setTimeout(() => {
+      setBursts((prev) => prev.filter((b) => b !== id))
+    }, 900)
+  }
+
+  function endPress() {
+    setPressed(false)
+  }
+
+  return (
+    <div
+      className="relative flex items-center justify-center"
+      style={{ width: size + 36, height: size + 36 }}
+    >
+      <AnimatePresence>
+        {pressed
+          ? [0, 1, 2].map((i) => (
+              <motion.span
+                key={`hold-${i}`}
+                aria-hidden
+                className="pointer-events-none absolute rounded-full"
+                style={{
+                  width: size,
+                  height: size,
+                  border: `1.5px solid ${i % 2 === 0 ? ring : ringSoft}`,
+                }}
+                initial={{ scale: 1, opacity: 0.6 }}
+                animate={{ scale: 1.9, opacity: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{
+                  duration: 1.35,
+                  ease: 'easeOut',
+                  repeat: Infinity,
+                  delay: i * 0.35,
+                }}
+              />
+            ))
+          : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {bursts.map((id) => (
+          <motion.span
+            key={id}
+            aria-hidden
+            className="pointer-events-none absolute rounded-full"
+            style={{
+              width: size,
+              height: size,
+              border: `1.5px solid ${ring}`,
+            }}
+            initial={{ scale: 1, opacity: 0.7 }}
+            animate={{ scale: 2, opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.85, ease: 'easeOut' }}
+          />
+        ))}
+      </AnimatePresence>
+
+      <motion.button
+        type="button"
+        aria-label={ariaLabel}
+        title={title}
+        className="relative z-10 flex items-center justify-center rounded-full"
+        style={
+          tone === 'accent'
+            ? {
+                width: size,
+                height: size,
+                background:
+                  'linear-gradient(145deg, var(--accent), var(--accent-2))',
+                boxShadow: '0 14px 26px rgba(0,0,0,.5)',
+              }
+            : {
+                width: size,
+                height: size,
+                color: 'var(--muted-2)',
+                borderColor: 'var(--line)',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                background: 'var(--ink-2)',
+              }
+        }
+        whileHover={
+          tone === 'accent' ? { filter: 'brightness(1.08)' } : { scale: 1.04 }
+        }
+        whileTap={{ scale: 0.92 }}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return
+          setPressed(true)
+          spawnBurst()
+        }}
+        onPointerUp={endPress}
+        onPointerCancel={endPress}
+        onPointerLeave={endPress}
+        onClick={onClick}
+      >
+        {children}
+      </motion.button>
+    </div>
+  )
+}
+
 export function ShortcutView() {
   const displayName = useAuthStore((s) => s.displayName)
+  const hasPin = useAuthStore((s) => s.hasPin)
+  const lockWithPin = useAuthStore((s) => s.lockWithPin)
+  const setSettingsOpen = useAuthStore((s) => s.setSettingsOpen)
   const cards = useCardStore((s) => s.cards)
   const setView = useCardStore((s) => s.setView)
   const openDocument = useCardStore((s) => s.openDocument)
@@ -258,6 +405,14 @@ export function ShortcutView() {
     } finally {
       setBusyId(null)
     }
+  }
+
+  function onLock() {
+    if (!hasPin) {
+      setSettingsOpen(true)
+      return
+    }
+    lockWithPin()
   }
 
   return (
@@ -305,19 +460,41 @@ export function ShortcutView() {
         )}
       </div>
 
-      <motion.button
-        type="button"
-        aria-label="Open pocket"
-        className="flex h-[60px] w-[60px] items-center justify-center rounded-full text-[26px] shadow-[0_14px_26px_rgba(0,0,0,.5)]"
-        style={{
-          background: 'linear-gradient(145deg, var(--accent), var(--accent-2))',
-        }}
-        whileHover={{ filter: 'brightness(1.08)' }}
-        whileTap={{ scale: 0.92 }}
-        onClick={() => setView('main')}
-      >
-        👛
-      </motion.button>
+      <div className="flex flex-col items-center gap-5">
+        <WaveButton
+          ariaLabel="Open pocket"
+          size={60}
+          tone="accent"
+          onClick={() => setView('main')}
+        >
+          <span className="text-[26px]" aria-hidden>
+            👛
+          </span>
+        </WaveButton>
+
+        <WaveButton
+          ariaLabel={hasPin ? 'Lock pocket' : 'Set a PIN to lock'}
+          title={hasPin ? 'Lock pocket' : 'Set a PIN to lock'}
+          size={44}
+          tone="muted"
+          onClick={onLock}
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <rect x="4.5" y="10.5" width="15" height="11" rx="2" />
+            <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+          </svg>
+        </WaveButton>
+      </div>
 
       <AnimatePresence>
         {pickerOpen ? (

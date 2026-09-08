@@ -22,11 +22,13 @@ type UserRow = {
   email: string | null
   google_sub: string
   auto_lock_seconds: number
+  preview_original_card: boolean
 }
 
 async function getUser(userId: string): Promise<UserRow | null> {
   const { rows } = await pool.query<UserRow>(
-    `SELECT id, pin_hash, display_name, email, google_sub, auto_lock_seconds
+    `SELECT id, pin_hash, display_name, email, google_sub, auto_lock_seconds,
+            preview_original_card
      FROM users WHERE id = $1`,
     [userId],
   )
@@ -41,6 +43,7 @@ function profileFromUser(row: UserRow) {
     hasPin: Boolean(row.pin_hash),
     hasGoogle: true,
     autoLockSeconds: row.auto_lock_seconds ?? 300,
+    previewOriginalCard: row.preview_original_card !== false,
     googleConfigured: Boolean(
       process.env.GOOGLE_OAUTH_CLIENT_ID &&
         process.env.GOOGLE_OAUTH_CLIENT_SECRET,
@@ -80,7 +83,8 @@ router.post('/dev-skip', async (_req, res) => {
        VALUES ('dev-local-skip', 'dev@localhost', 'Dev User', now())
        ON CONFLICT (google_sub) DO UPDATE SET
          updated_at = now()
-       RETURNING id, pin_hash, display_name, email, google_sub, auto_lock_seconds`,
+       RETURNING id, pin_hash, display_name, email, google_sub, auto_lock_seconds,
+                 preview_original_card`,
     )
     const user = rows[0]
     const token = signSessionToken(user.id)
@@ -142,6 +146,11 @@ router.patch('/settings', requireAuth, async (req, res) => {
       autoLockSecondsRaw !== undefined
         ? Number(autoLockSecondsRaw)
         : undefined
+    const previewOriginalCardRaw = req.body?.previewOriginalCard
+    const previewOriginalCard =
+      previewOriginalCardRaw !== undefined
+        ? Boolean(previewOriginalCardRaw)
+        : undefined
 
     if (displayName !== undefined && displayName.length > 80) {
       res.status(400).json({ error: 'Name is too long' })
@@ -168,6 +177,10 @@ router.patch('/settings', requireAuth, async (req, res) => {
     if (autoLockSeconds !== undefined) {
       sets.push(`auto_lock_seconds = $${i++}`)
       values.push(autoLockSeconds)
+    }
+    if (previewOriginalCard !== undefined) {
+      sets.push(`preview_original_card = $${i++}`)
+      values.push(previewOriginalCard)
     }
 
     if (sets.length === 0) {

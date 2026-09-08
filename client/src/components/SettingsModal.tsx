@@ -25,12 +25,14 @@ export function SettingsModal() {
   const email = useAuthStore((s) => s.email)
   const hasPin = useAuthStore((s) => s.hasPin)
   const autoLockSeconds = useAuthStore((s) => s.autoLockSeconds)
+  const previewOriginalCard = useAuthStore((s) => s.previewOriginalCard)
   const updateSettings = useAuthStore((s) => s.updateSettings)
   const updatePin = useAuthStore((s) => s.updatePin)
   const logout = useAuthStore((s) => s.logout)
 
   const [name, setName] = useState(displayName ?? '')
   const [lockSecs, setLockSecs] = useState(autoLockSeconds)
+  const [previewOriginal, setPreviewOriginal] = useState(previewOriginalCard)
   const [currentPin, setCurrentPin] = useState('')
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -43,13 +45,14 @@ export function SettingsModal() {
     if (!open) return
     setName(displayName ?? '')
     setLockSecs(autoLockSeconds)
+    setPreviewOriginal(previewOriginalCard)
     setCurrentPin('')
     setNewPin('')
     setConfirmPin('')
     setMessage(null)
     setError(null)
     window.setTimeout(() => nameRef.current?.focus(), 50)
-  }, [open, displayName, autoLockSeconds])
+  }, [open, displayName, autoLockSeconds, previewOriginalCard])
 
   async function saveProfile() {
     setBusy(true)
@@ -59,6 +62,7 @@ export function SettingsModal() {
       await updateSettings({
         displayName: name.trim(),
         autoLockSeconds: lockSecs,
+        previewOriginalCard: previewOriginal,
       })
       setMessage('Settings saved')
     } catch (err) {
@@ -169,7 +173,7 @@ export function SettingsModal() {
               Auto-lock after
             </label>
             <select
-              className="mb-4 w-full rounded-xl border px-3.5 py-3 text-sm outline-none"
+              className="mb-3 w-full rounded-xl border px-3.5 py-3 text-sm outline-none"
               style={{
                 background: 'var(--ink)',
                 borderColor: 'var(--line)',
@@ -184,6 +188,35 @@ export function SettingsModal() {
                 </option>
               ))}
             </select>
+
+            <label
+              className="mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-3"
+              style={{
+                background: 'var(--ink)',
+                borderColor: 'var(--line)',
+              }}
+            >
+              <span className="min-w-0">
+                <span
+                  className="block text-sm"
+                  style={{ color: 'var(--paper)' }}
+                >
+                  Preview original card
+                </span>
+                <span
+                  className="mt-0.5 block text-xs"
+                  style={{ color: 'var(--muted-2)' }}
+                >
+                  Off shows plain color faces
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                className="h-4 w-4 shrink-0 accent-[var(--accent-2)]"
+                checked={previewOriginal}
+                onChange={(e) => setPreviewOriginal(e.target.checked)}
+              />
+            </label>
 
             <button
               type="button"

@@ -7,6 +7,7 @@ export type AuthProfile = {
   hasPin: boolean
   hasGoogle: boolean
   autoLockSeconds: number
+  previewOriginalCard: boolean
   googleConfigured: boolean
   devSkipEnabled?: boolean
 }
@@ -72,6 +73,7 @@ export const api = {
   updateSettings(body: {
     displayName?: string
     autoLockSeconds?: number
+    previewOriginalCard?: boolean
   }) {
     return request<AuthProfile>('/api/auth/settings', {
       method: 'PATCH',

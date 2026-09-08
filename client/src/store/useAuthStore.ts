@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { api, type AuthProfile } from '../lib/api'
+import { useCardStore } from './useCardStore'
 
 type AuthState = {
   status: 'unknown' | 'locked' | 'authenticated'
@@ -9,6 +10,7 @@ type AuthState = {
   email: string | null
   hasPin: boolean
   autoLockSeconds: number
+  previewOriginalCard: boolean
   googleConfigured: boolean
   devSkipEnabled: boolean
   settingsOpen: boolean
@@ -22,6 +24,7 @@ type AuthState = {
   updateSettings: (body: {
     displayName?: string
     autoLockSeconds?: number
+    previewOriginalCard?: boolean
   }) => Promise<void>
   updatePin: (body: {
     currentPin?: string
@@ -39,6 +42,7 @@ function profileFields(profile: AuthProfile) {
     email: profile.email,
     hasPin: profile.hasPin,
     autoLockSeconds: profile.autoLockSeconds,
+    previewOriginalCard: profile.previewOriginalCard !== false,
     googleConfigured: profile.googleConfigured,
     devSkipEnabled: Boolean(profile.devSkipEnabled),
   }
@@ -51,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   email: null,
   hasPin: false,
   autoLockSeconds: 300,
+  previewOriginalCard: true,
   googleConfigured: false,
   devSkipEnabled: false,
   settingsOpen: false,
@@ -63,6 +68,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       pinLocked: false,
       error: null,
     })
+    useCardStore.getState().setView('shortcut')
   },
 
   async loadConfig() {
@@ -124,6 +130,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { status, hasPin } = get()
     if (status !== 'authenticated' || !hasPin) return
     set({ pinLocked: true, settingsOpen: false, error: null })
+    useCardStore.getState().setView('shortcut')
   },
 
   async updateSettings(body) {
