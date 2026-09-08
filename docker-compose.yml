@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mypocket
+      POSTGRES_PASSWORD: mypocket
+      POSTGRES_DB: mypocket
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mypocket -d mypocket']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    restart: 'no'
+    environment:
+      DATABASE_URL: postgresql://mypocket:mypocket@db:5432/mypocket
+      PIN_FALLBACK: ${PIN_FALLBACK:-1234}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://mypocket:mypocket@db:5432/mypocket
+      PIN_FALLBACK: ${PIN_FALLBACK:-1234}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-https://my-pocket.teknodika.com}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_CALLBACK_URL: ${GOOGLE_OAUTH_CALLBACK_URL:-https://my-pocket.teknodika.com/auth/google/callback}
+      NODE_ENV: production
+      PORT: '3000'
+      CLIENT_DIST: /app/client-dist
+    ports:
+      - '127.0.0.1:${APP_HOST_PORT:-13001}:3000'
+    volumes:
+      - uploads:/app/server/src/uploads
+
+volumes:
+  pgdata:
+  uploads:

@@ -1,0 +1,9 @@
+# Local only — publish Postgres so `npm run dev` can reach it from the host.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+# Then DATABASE_URL=postgresql://mypocket:mypocket@localhost:5433/mypocket
+
+services:
+  db:
+    ports:
+      - '5433:5432'

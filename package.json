@@ -1,0 +1,15 @@
+{
+  "name": "mypocket",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,client -c magenta,cyan \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev:db": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db",
+    "build:client": "npm run build --prefix client",
+    "deploy:docker": "bash deploy/docker-deploy.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

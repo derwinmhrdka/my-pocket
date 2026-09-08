@@ -1,0 +1,41 @@
+# Host nginx — HTTPS for MyPocket
+# Docker app listens on 127.0.0.1:13001 only (same VPS pattern as MahardioraHub / 13000).
+#
+# Setup on VPS (once):
+#   1. DNS: your-domain → VPS IP
+#   2. sudo cp deploy/nginx-mypocket.conf.example /etc/nginx/sites-available/mypocket
+#   3. Edit server_name + proxy_pass if you changed APP_HOST_PORT / DOMAIN
+#   4. sudo ln -s /etc/nginx/sites-available/mypocket /etc/nginx/sites-enabled/
+#   5. sudo nginx -t && sudo systemctl reload nginx
+#   6. sudo certbot --nginx -d YOUR_DOMAIN
+#
+# Deploy app: bash deploy/docker-deploy.sh
+
+server {
+    listen 80;
+    server_name my-pocket.teknodika.com;
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name my-pocket.teknodika.com;
+
+    # certbot adds ssl_certificate / ssl_certificate_key here
+
+    client_max_body_size 20M;
+
+    location / {
+        proxy_pass http://127.0.0.1:13001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
